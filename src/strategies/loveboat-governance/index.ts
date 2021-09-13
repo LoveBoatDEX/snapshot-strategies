@@ -155,8 +155,8 @@ const tokenAbi = [
 const loveUsdcLPAddr = '0x10838EF3DEf20f6F5Dd963c3E9E510971ee4CA4F';
 const loveUsdcRewardsAddr = '0x27E70eD8FF2f3ABCA58503A323cA72adFc2712C0';
 
-// const loveMaticLPAddr = '0x8bc6F4b90129b26Efb0E52C2B51E5B1782ca29Ad';
-// const loveMaticRewardsAddr = '0x1eC753dE7B88C5F2a3ab143642495A5ee2221FBf';
+const loveMaticLPAddr = '0x8bc6F4b90129b26Efb0E52C2B51E5B1782ca29Ad';
+const loveMaticRewardsAddr = '0x1eC753dE7B88C5F2a3ab143642495A5ee2221FBf';
 
 export async function strategy(
   space,
@@ -174,13 +174,14 @@ export async function strategy(
     [
       [loveUsdcLPAddr, 'totalSupply', []],
       [options.address, 'balanceOf', [loveUsdcLPAddr]] // balance of Love in LOVE LP contract
-    ].concat(
-      addresses.map((address: any) => [
-        loveUsdcRewardsAddr,
-        'balanceOf',
-        [address]
-      ])
-    ) /*
+    ]
+      .concat(
+        addresses.map((address: any) => [
+          loveUsdcRewardsAddr,
+          'balanceOf',
+          [address]
+        ])
+      )
       .concat(
         [
           [loveMaticLPAddr, 'totalSupply', []],
@@ -192,44 +193,63 @@ export async function strategy(
             [address]
           ])
         )
-      )*/,
+      ),
     { blockTag }
   );
-  // const multi = new Multicaller(network, provider, abi, { blockTag });
-  // addresses.forEach((address) =>
-  //   multi.call(address, [
-  //     [
-  //       '0x27e70ed8ff2f3abca58503a323ca72adfc2712c0', // balanceOf LOVE LP
-  //       'balanceOf',
-  //       [address]
-  //     ]
-  //   ])
-  // );
 
   const numberOfAddresses = addresses.length;
   console.log(numberOfAddresses);
-  const totalSupply = res[0];
-  const tokenBalanceInLP = res[1];
-  const tokensPerLP =
-    tokenBalanceInLP / 10 ** options.decimals / (totalSupply / 1e18);
 
-  const response = res.slice(2, numberOfAddresses + 2);
+  let totalSupply;
+  let tokenBalanceInLP;
+  let tokensPerLP;
+
+  let responseRaw!: number[];
+
+  // Derived response
+  let responseDer!: number[];
+
+  let responses!: number[];
+
+  // Loop through LOVE LP Love Token pairs.
+  for (let i = 0; i < 2; i++) {
+    console.log(`i is = ${i}`);
+
+    totalSupply = i == 0 ? res[0] : res[3 + i * numberOfAddresses];
+    tokenBalanceInLP = i == 0 ? res[1] : res[4 + i * numberOfAddresses];
+    tokensPerLP =
+      tokenBalanceInLP / 10 ** options.decimals / (totalSupply / 1e18);
+
+    responseRaw =
+      i == 0
+        ? res.slice(2, numberOfAddresses + 2)
+        : res.slice(
+            3 + numberOfAddresses * i,
+            3 + numberOfAddresses * i + numberOfAddresses
+          );
+
+    responseDer = responseRaw.map(
+      (userInfo) => (userInfo / 10 ** options.decimals) * tokensPerLP
+    );
+
+    if (i == 0) {
+      // First response.
+      responses = responseDer;
+    } else if (i > 0) {
+      // Add previous response to itself.
+      responses = responses.map((responses, k) => {
+        console.log(
+          `In the else if loop ${i}: "old" responses: ${responses}, "current" responseDer: ${responseDer[k]}`
+        );
+        console.log(responses + responseDer[k]);
+        return responses + responseDer[k];
+      });
+    }
+  }
 
   return Object.fromEntries(
-    response.map((userInfo, i) => [
-      addresses[i],
-      (userInfo / 10 ** options.decimals) * tokensPerLP
-    ])
+    responses.map((userInfo, j) => [addresses[j], userInfo])
   );
-
-  // const result: Record<string, BigNumberish> = await multi.execute();
-
-  // return Object.fromEntries(
-  //   Object.entries(result).map(([address, balance]) => [
-  //     address,
-  //     parseFloat(formatUnits(balance, options.decimals))
-  //   ])
-  // );
 }
 
 /// For all Love rewards contracts
